@@ -1,5 +1,4 @@
 import cv2
-from polars import var
 from ultralytics import YOLO
 import supervision as sv
 from fastapi import FastAPI
