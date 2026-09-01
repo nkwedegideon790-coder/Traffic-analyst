@@ -3,3 +3,4 @@ ultralytics
 supervision
 fastapi
 uvicorn
+streamlit
