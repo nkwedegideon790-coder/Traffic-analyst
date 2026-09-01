@@ -19,8 +19,10 @@ with sqlite3.connect('traffic.db') as conn:
                         traffic_count INTEGER
                     )''')
     conn.commit()
+# ------------------ DATABASE CONNECTION ------------------ #
 conn = sqlite3.connect('traffic.db', check_same_thread=False)
 cursor = conn.cursor()
+# ------------------ LOGGING FUNCTION ------------------ #
 def log_to_db(status, avg_count):
     Time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # Insert the data into the database
@@ -29,16 +31,12 @@ def log_to_db(status, avg_count):
 
 app = FastAPI()
 
+# ------------------ VIDEO CAPTURE AND MODEL ------------------ #
 cap = cv2.VideoCapture('traffic.mp4')  # or 0 for webcam
 model = YOLO('yolov8n.pt')  # Load the YOLOv8 model
-box_annonator = sv.BoxAnnotator()
-line_annonator = sv.LineZoneAnnotator()
-label_annonator = sv.LabelAnnotator()
-history = []
-
-
-
-Log_interval = 5  # Log every 5 seconds
+box_annonator = sv.BoxAnnotator() #// Create a box annotator for drawing bounding boxes
+history = [] # get the history of traffic counts for averaging 
+Log_interval = 10  # Log every 5 seconds
 # ------------------ ROUTES ------------------ #
 
 @app.get('/')
@@ -70,19 +68,19 @@ def frame_generator():
                 return "Medium"
             else:
                 return "High"
-        
+        # Calculate average traffic count over the last 10 frames
         current_time = time.time()
         history.append(traffic_count)
         if len(history)>10:
             history.pop(0)
 
-
+        # Calculate average traffic count and classify density
         avg_count = sum(history)//len(history)
         status = classify(avg_count)
         if current_time - last_log_time >= Log_interval:
             log_to_db(status,avg_count)
             last_log_time = current_time
-
+        # Annotate the frame with traffic density information
         annonater_frame = box_annonator.annotate(scene=frame, detections=detections)
         cv2.putText(annonater_frame, f'Traffic Density: {status}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         # Encode frame for streaming
@@ -105,6 +103,7 @@ def video_feed():
         media_type='multipart/x-mixed-replace; boundary=frame'
     )
 
+# ------------------ DATABASE CHECK ------------------ #
 @app.get('/check_db')
 def check_db():
     conn = sqlite3.connect('traffic.db')

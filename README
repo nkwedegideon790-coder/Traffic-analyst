@@ -1,0 +1,128 @@
+# Traffic Analyst
+
+A real-time traffic monitoring application that detects vehicles in a video stream or webcam feed, classifies traffic density, streams the annotated video, and stores summary data in SQLite.
+
+## Features
+
+- Vehicle detection using YOLO
+- Traffic density classification: Low, Medium, High
+- Annotated video stream with bounding boxes
+- FastAPI web server
+- SQLite logging for traffic density and counts
+- Simple API endpoints for health checks and database inspection
+
+## Tech Stack
+
+- Python
+- OpenCV
+- Ultralytics YOLO
+- Supervision
+- FastAPI
+- SQLite
+- Uvicorn
+
+## Project Structure
+
+- `main.py` - main application logic
+- `requirements.txt` - Python dependencies
+- `int8_openvivo/` - YOLO model files
+- `traffic.db` - SQLite database created at runtime
+- `traffic.mp4` - video input file used by the app
+- `yolov8n.pt` - optional base YOLO model file
+
+## Requirements
+
+Python 3.9+ is recommended.
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Running the App
+
+1. Place your video file as `traffic.mp4` in the project folder, or change the source in `main.py` to use your webcam (`0`).
+2. Start the server:
+
+```bash
+python main.py
+```
+
+3. Open the following in a browser:
+
+- `http://localhost:8000/` for a simple health check
+- `http://localhost:8000/video_feed` for the live annotated video stream
+- `http://localhost:8000/check_db` for recent database entries
+
+## API Endpoints
+
+### GET `/`
+
+Returns a simple status message:
+
+```json
+{ "status": "Running" }
+```
+
+### GET `/video_feed`
+
+Streams the realtime annotated video.
+
+### GET `/check_db`
+
+Returns the last five traffic log entries from SQLite.
+
+## How It Works
+
+- The app reads frames from a video source.
+- YOLO detects objects such as cars and trucks.
+- The number of detected vehicles is counted.
+- A moving average over recent frames is used to reduce noise.
+- Traffic density is classified as:
+  - Low: fewer than 5 vehicles
+  - Medium: 5 to 14 vehicles
+  - High: 15 or more vehicles
+- The result is logged into the SQLite `traffic_data` table.
+
+## Database
+
+The app creates a SQLite database file named `traffic.db` automatically.
+
+Table schema:
+
+```sql
+CREATE TABLE IF NOT EXISTS traffic_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    time TEXT,
+    traffic_density TEXT,
+    traffic_count INTEGER
+)
+```
+
+## Notes
+
+- The app currently uses a fixed video file named `traffic.mp4` by default.
+- To use a webcam, replace:
+
+```python
+cap = cv2.VideoCapture('traffic.mp4')
+```
+
+with:
+
+```python
+cap = cv2.VideoCapture(0)
+```
+
+- The detection model is loaded from the `int8_openvivo` directory.
+
+## Troubleshooting
+
+- If the app cannot find the video file, make sure `traffic.mp4` is present in the project folder.
+- If YOLO model loading fails, verify the `int8_openvivo` folder contains valid model files.
+- If dependencies fail to install, upgrade pip and reinstall the packages from `requirements.txt`.
+
+## License
+
+This project is intended for educational and experimental use.
