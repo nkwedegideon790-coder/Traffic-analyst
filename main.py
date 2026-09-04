@@ -16,17 +16,27 @@ with sqlite3.connect('traffic.db') as conn:
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         time TEXT,
                         traffic_density TEXT,
-                        traffic_count INTEGER
+                        traffic_count INTEGER,
+                        car_count INTEGER,
+                        motorcycle_count INTEGER,
+                        bus_count INTEGER,
+                        truck_count INTEGER
                     )''')
     conn.commit()
 # ------------------ DATABASE CONNECTION ------------------ #
 conn = sqlite3.connect('traffic.db', check_same_thread=False)
 cursor = conn.cursor()
 # ------------------ LOGGING FUNCTION ------------------ #
-def log_to_db(status, avg_count):
+vehicles_classes = {
+            2: "car",
+            3: "motorcycle",
+            5: "bus",
+            7: "truck"
+        }
+def log_to_db(status, avg_count, vehicles_count):
     Time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # Insert the data into the database
-    cursor.execute("INSERT INTO traffic_data (time, traffic_density, traffic_count) VALUES (?, ?, ?)", (Time, status, avg_count))
+    cursor.execute("INSERT INTO traffic_data (time, traffic_density, traffic_count, car_count, motorcycle_count, bus_count, truck_count) VALUES (?, ?, ?, ?, ?, ?, ?)", (Time, status, avg_count, vehicles_count['car'], vehicles_count['motorcycle'], vehicles_count['bus'], vehicles_count['truck']))
     conn.commit()
 
 app = FastAPI()
@@ -36,7 +46,9 @@ cap = cv2.VideoCapture('traffic.mp4')  # or 0 for webcam
 model = YOLO('yolov8n.pt')  # Load the YOLOv8 model
 box_annonator = sv.BoxAnnotator() #// Create a box annotator for drawing bounding boxes
 history = [] # get the history of traffic counts for averaging 
-Log_interval = 10  # Log every 5 seconds
+Log_interval = 5  # Log every 5 seconds
+Tracker = sv.ByteTrack()
+
 # ------------------ ROUTES ------------------ #
 
 @app.get('/')
@@ -46,40 +58,61 @@ def stats():
 # ------------------ FRAME GENERATOR ------------------ #
 
 def frame_generator():
-
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 340)
+    frame_count = 0
+    skip_frame = 10
+    last_detection = None
     last_log_time = time.time()
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
+        if frame_count % skip_frame == 0:
+            # YOLO detection
+            results = model(frame, classes = [2,3,5,7], conf=0.6, imgsz=416, verbose=False)[0]
+            detections =sv.Detections.from_ultralytics(results)
+            detections = Tracker.update_with_detections(detections)
+            last_detection = detections
+            # detections = Tracker.update_with_detections(detections)
+            vehicles_count = {
+                'car': 0,
+                'motorcycle': 0,
+                'bus': 0,
+                'truck': 0
+            }
+            for result in results:
+                for box in result.boxes:
+                    class_id = int(box.cls[0])
+                    if class_id in vehicles_classes:
+                        vehicle_type = vehicles_classes[class_id]
+                        vehicles_count[vehicle_type] += 1
        
-        # YOLO detection
-        results = model(frame, classes = [2,3,5,7], conf=0.6, imgsz=416, verbose=False)[0]
-        detections =sv.Detections.from_ultralytics(results)
-        # detections = Tracker.update_with_detections(detections)
-        traffic_count = len(detections)
+            traffic_count = sum(vehicles_count.values())
+            # classify density of traffic
+            def classify(traffic_count):
+                if traffic_count < 5:
+                    return "Low"
+                elif len(detections) < 15:
+                    return "Medium"
+                else:
+                    return "High"
+        
+             # Calculate average traffic count over the last 10 frames
+            current_time = time.time()
+            history.append(traffic_count)
+            if len(history)>10:
+                history.pop(0)
 
-        # classify density of traffic
-        def classify(traffic_count):
-            if traffic_count < 5:
-                return "Low"
-            elif len(detections) < 15:
-                return "Medium"
-            else:
-                return "High"
-        # Calculate average traffic count over the last 10 frames
-        current_time = time.time()
-        history.append(traffic_count)
-        if len(history)>10:
-            history.pop(0)
-
-        # Calculate average traffic count and classify density
-        avg_count = sum(history)//len(history)
-        status = classify(avg_count)
-        if current_time - last_log_time >= Log_interval:
-            log_to_db(status,avg_count)
-            last_log_time = current_time
+            # Calculate average traffic count and classify density
+            avg_count = sum(history)//len(history)
+            status = classify(avg_count)
+            if current_time - last_log_time >= Log_interval:
+                log_to_db(status,avg_count, vehicles_count)
+                last_log_time = current_time
+        else:
+            detections = last_detection
         # Annotate the frame with traffic density information
         annonater_frame = box_annonator.annotate(scene=frame, detections=detections)
         cv2.putText(annonater_frame, f'Traffic Density: {status}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -93,7 +126,8 @@ def frame_generator():
             frame_bytes +
             b'\r\n'
         )
-
+    frame_count += 1
+    cap.release()
 # ------------------ VIDEO STREAM ------------------ #
 
 @app.get('/video_feed')

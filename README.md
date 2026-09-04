@@ -92,7 +92,7 @@ Returns the latest logged entries from the SQLite database.
 ## How It Works
 
 - Frames are read from a source such as `traffic.mp4` or a webcam.
-- YOLO detects vehicle classes in each frame.
+- Every 5th frame is processed by the YOLO model..
 - The detected vehicle count is averaged over recent frames to reduce noise.
 - The traffic density is classified as:
   - Low: fewer than 5 vehicles

@@ -8,16 +8,16 @@ st.markdown(
     """
     <style>
         .stApp {
-            background: #f5f7fb;
-            color: #111827;
+            background: linear-gradient(135deg, #0b1220 0%, #111827 100%);
+            color: #e5eefb;
         }
 
         .metric-box {
-            background: white;
-            border: 1px solid #e5e7eb;
+            background: #111827;
+            border: 1px solid #243244;
             border-radius: 12px;
             padding: 1rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+            box-shadow: 0 2px 10px rgba(59, 130, 246, 0.18);
             height: 100%;
         }
 
@@ -29,9 +29,9 @@ st.markdown(
             font-size: 0.8rem;
         }
 
-        .low { background: #dcfce7; color: #166534; }
-        .medium { background: #fef3c7; color: #92400e; }
-        .high { background: #fee2e2; color: #991b1b; }
+        .low { background: #1d4ed8; color: #e0ecff; }
+        .medium { background: #0ea5e9; color: #e0f2fe; }
+        .high { background: #b91c1c; color: #fee2e2; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -46,7 +46,7 @@ def get_recent_logs(limit: int = 8):
         conn = sqlite3.connect("traffic.db")
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, time, traffic_density, traffic_count FROM traffic_data ORDER BY id DESC LIMIT ?",
+            "SELECT id, time, traffic_density, traffic_count, car_count, motorcycle_count, bus_count, truck_count FROM traffic_data ORDER BY id DESC LIMIT ?",
             (limit,),
         )
         rows = cursor.fetchall()
@@ -121,7 +121,9 @@ with right_col:
     st.markdown("---")
     if rows:
         density_data = {"Low": 0, "Medium": 0, "High": 0}
-        for _, _, density, count in rows:
+        for row in rows:
+            density = row[2]
+            count = row[3]
             if density in density_data:
                 density_data[density] += count
         st.bar_chart(density_data)
@@ -132,7 +134,7 @@ st.markdown("---")
 
 st.subheader("Recent Logs")
 if rows:
-    table_data = [{"Time": row[1], "Density": row[2], "Vehicles": row[3]} for row in rows]
+    table_data = [{"Time": row[1], "Density": row[2], "Car": row[4], "Motorcycle": row[4], "Bus": row[5], "Truck": row[6], "Vehicles": row[7]} for row in rows]
     st.table(table_data)
 else:
     st.info("No traffic data has been recorded yet.")
